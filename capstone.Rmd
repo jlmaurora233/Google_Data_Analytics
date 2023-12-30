@@ -1,21 +1,11 @@
 ---
-title: "case_study_bellabeat"
+title: "Capstone Project: BellaBeat's Smart Device Data Analysis"
 author: "LJ"
-date: "2023-12-27"
-output: html_document
+date: "2023-12-30"
+output: 
+  html_document:
+    toc: true
 ---
-# Capstone Project: BellaBeat's Smart Device Data Analysis
-
-# Table of Content
-* Summary
-* Data Analysis Roadmap
-  + Ask
-  + Prepare
-  + Process
-  + Analyze
-  + Share
-  + Act
-* Conclusion
 
 ## Summary
 
@@ -23,13 +13,14 @@ output: html_document
 Bellabeat, founded by Urška Sršen and Sando Mur, is a high-tech company specializing in health-focused smart products. The company develops beautifully designed technology aimed at informing and inspiring women worldwide. Bellabeat's products collect data on activity, sleep, stress, and reproductive health, empowering women with knowledge about their well-being and habits.
 
 ### Business Tasks
-Bellabeat offers several products: Bellabeat app, Leaf (wellness tracker), Time (wellness watch), Spring (water bottle), and membership. The project's goal is to focus on one of Bellabeat’s products and analyze smart device data to gain insight into how consumers are using their smart devices. Specifically, the project will include analysis of Leaf and Time.
+Bellabeat offers several products: Bellabeat app, Leaf (wellness tracker), Time (wellness watch), Spring (water bottle), and membership. The project's goal is to focus on one of Bellabeat’s products and analyze smart device data to gain insight into how consumers are using their smart devices.
 
 ### Stakeholders
 * Urška Sršen: Bellabeat’s cofounder and Chief Creative Officer
 * Sando Mur: Mathematician and Bellabeat’s cofounder; key member of the Bellabeat executive team
 
 ## Data Analysis Roadmap
+There are 6 stages in a complete data analysis roadmap: Ask, Prepare, Process, Analyze, Share, and Act. This document is made for the Share phase to serve as a presentation of the project goals, analysis process, and results. The Act stage goes together with the Conclusion section of this document.
 ### Ask
 In order to address the major business tasks, the following questions regarding the smart devices' usage need to the answered:
 * What are some trends in smart device usage?
@@ -80,3 +71,163 @@ glimpse(hourly_steps)
 ```
 
 From the above check on the contents of the datasets, we now know the size of each dataset and which kind of data is included in the datasets. We also know where in the datasets that we need to clean in the next stage. For instance, in the `hourly_` datasets, we need to separate date from hours to make sure that each row corresponds to an hour in a date.
+
+### Process
+* Step 1: Remove NA or duplicates in the datasets, if any.
+```{r}
+daily_activity <- daily_activity %>% 
+  drop_na() %>% distinct()
+daily_calories <- daily_calories %>% 
+  drop_na() %>% distinct()
+daily_intensities <- daily_intensities %>% 
+  drop_na() %>% distinct()
+daily_steps <- daily_steps %>% 
+  drop_na() %>% distinct()
+
+hourly_calories <- hourly_calories %>% 
+  drop_na() %>% distinct()
+hourly_intensities <- hourly_intensities %>% 
+  drop_na() %>% distinct()
+hourly_steps <- hourly_steps %>% 
+  drop_na() %>% distinct()
+```
+
+* Step 2: Process the `ActivityDate` column. We need to change its `dtype` to `date` and better sort them in time order for ease of future usage (especially plotting).
+```{r}
+daily_activity <- daily_activity %>% 
+  mutate(ActivityDate = as.Date(mdy(ActivityDate))) %>%
+  arrange(ActivityDate) 
+
+daily_calories <- daily_calories %>% 
+  mutate(ActivityDay = as.Date(mdy(ActivityDay))) %>%
+  arrange(ActivityDay)
+
+daily_intensities <- daily_intensities %>% 
+  mutate(ActivityDay = as.Date(mdy(ActivityDay))) %>%
+  arrange(ActivityDay)
+
+daily_steps <- daily_steps %>% 
+  mutate(ActivityDay = as.Date(mdy(ActivityDay))) %>%
+  arrange(ActivityDay)
+```
+
+* Step 3: Process the ActivityHour column. We also need to change its `dtype` first. After that, since the `ActivityHour` column contains both date and time, we also need to separate it.
+```{r}
+hourly_calories <- hourly_calories %>% 
+  mutate(
+    ActivityHour = as_datetime(ActivityHour, format = "%m/%d/%Y %I:%M:%S %p"),
+    Date = as.Date(ActivityHour),
+    Time = format(ActivityHour, format = "%H:%M:%S")
+  )
+hourly_intensities <- hourly_intensities %>% 
+  mutate(
+    ActivityHour = as_datetime(ActivityHour, format = "%m/%d/%Y %I:%M:%S %p"),
+    Date = as.Date(ActivityHour),
+    Time = format(ActivityHour, format = "%H:%M:%S")
+  )
+hourly_steps <- hourly_steps %>% 
+  mutate(
+    ActivityHour = as_datetime(ActivityHour, format = "%m/%d/%Y %I:%M:%S %p"),
+    Date = as.Date(ActivityHour),
+    Time = format(ActivityHour, format = "%H:%M:%S")
+  )
+```
+
+### Analysis
+The data analysis will be conducted on each of the datasets following the order of `daily_` and `hourly_`.
+Now let's start looking into detail of our data.
+```{r}
+daily_activity_grouped <- daily_activity %>% group_by(Id)
+
+ggplot(daily_activity_grouped, aes(x = ActivityDate, y = TotalSteps)) + geom_line() +
+  facet_wrap(~ Id)
+# It looks like not everyone is exercising daily, so let's go head and find out
+# how many of the survey participants are skipping days
+record_counts <- daily_activity_grouped %>% summarise(Count = n())
+# data from 4-12-2016 to 5-12-2016 is included in the dataset
+complete_data_threshold <- 31
+half_threshold <- 15
+# find the number of participants who do not have complete records
+count_below_threshold1 <- sum(record_counts$Count < complete_data_threshold)
+count_below_threshold2 <- sum(record_counts$Count < half_threshold)
+```
+
+There are in total 33 participants. From the analysis above, 12 of participants didn't complete the exercise daily and one of them didn't complete it more than half of the survey period, which is a month.
+
+Examine if there's any correlation between the quantities listed in the `daily_activity` dataset. As `Calories` often occur as a benchmark for evaluating the results of doing exercises/workout, it's better for us to examine if `Calories` in this case is correlated with certain quantities:
+```{r}
+cor_matrix_activity <- daily_activity %>% 
+  select(TotalDistance,TotalSteps,VeryActiveDistance, VeryActiveMinutes, ModeratelyActiveDistance, FairlyActiveMinutes, Calories) %>% 
+  mutate_all(as.numeric) %>% cor()
+heatmap(cor_matrix_activity, 
+        col = colorRampPalette(c("white", "blue"))(20),
+        margins = c(5, 5))
+```
+
+We can see that `VeryActiveMinutes`, `TotalDistance`, and `VeryActiveDistance` are the three factors and influence `Calories` the most.
+
+As we've already mentioned `Calories` above, let's go ahead and take a look at our `daily_calories` dataset:
+```{r}
+daily_calories_grouped <- daily_calories %>% group_by(Id)
+ggplot(daily_calories_grouped, aes(x = ActivityDay, y = Calories)) + geom_line() +
+  facet_wrap(~ Id)
+```
+
+From the plot, we notice that the majority of user's daily calories maintain at a stable level with small fluctuations and decreases in the last few days of the reporting period.
+
+Then go to `daily_intensities`:
+```{r}
+summary(daily_intensities)
+```
+
+The `VeryActiveMinutes` mean is 21.16, which isn't long while it ranks as the top factor to contribute to `Calories`.
+
+Let's take a closer look each single day and start analyzing our `hourly_` datasets. Since the hourly datasets list data measured in every hour of every day in the survey period, it's easier for us to get an idea out of it by calculating the summary statistics across this period before going to the next step.
+```{r}
+hourly_calories_grouped <- hourly_calories %>% group_by(Time) %>% 
+  summarise(average_calories = mean(Calories))
+
+hourly_intensities_grouped <- hourly_intensities %>% group_by(Time) %>% 
+  summarise(average_intensity = mean(TotalIntensity))
+
+hourly_steps_grouped <- hourly_steps %>% group_by(Time) %>% 
+  summarise(average_step = mean(StepTotal))
+```
+
+Now that we have the averages of a few hourly measurements distributed across 24 hours of a day, we can make parallel comparisons for these measurements in an 'average' day.
+```{r}
+ggplot(data = hourly_calories_grouped) +
+  geom_col(mapping = aes(x = Time, y = average_calories, fill = average_calories)) +
+  scale_fill_gradient(low = "blue", high = "orange") +
+  labs(title = "Average Hourly Calories In A Typical Day", x = "Time", y = "Calories") +
+  theme(axis.text.x = element_text(angle = 90))
+
+ggplot(data = hourly_intensities_grouped) +
+  geom_col(mapping = aes(x = Time, y = average_intensity, fill = average_intensity)) +
+  scale_fill_gradient(low = "red", high = "green") +
+  labs(title = "Average Hourly Intensities In A Typical Day", x = "Time", y = "Intensities") +
+  theme(axis.text.x = element_text(angle = 90))
+
+ggplot(data = hourly_steps_grouped) +
+  geom_col(mapping = aes(x = Time, y = average_step, fill = average_step)) +
+  scale_fill_gradient(low = "grey", high = "pink") + 
+  labs(title = "Average Hourly Steps In A Typical Day", x = "Time", y = "Steps") +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+After observing the above 3 histograms, we can derive the time intervals of two peaks of the three quantities (calories, intensities, and steps) in a typical day: 11:30 - 14:00 and 16:30 - 19:00. 
+
+## Conclusion & Act
+* For Bellabeat's device usage, we learn from the survey data that:
+  + About 60% of customers use the smart device daily, 37% of customers use the smart device for more than half of the time in a month, and 3% of customers use it for less than half of the time in a month.
+  + The two peaks of daily usage occur during 11:30 - 14:00 and 16:30 - 19:00.
+
+* By analyzing the data recorded by Bellabeat's smart device, we also discover trends about customers' activities:
+  + The majority of users' daily calories maintain at a stable level with small fluctuations and decreases in the last few days of the reporting period.
+  + `VeryActiveMinutes`, `TotalDistance`, and `VeryActiveDistance` are the three factors and influence `Calories` the most.
+  + The `VeryActiveMinutes` mean is 21.16; the `VeryActiveDistance` mean is 1.503.
+  
+* Hence, we can make suggestions to improve Bellabeat's smart device functions and marketing strategies:
+  + Add new functions to the product to encourage people to do exercise daily, such as reminders at those two peaks and click-in bonus.
+  + Some rewarding mechanism can also be added to the smart devices to increase user usage during that tough ending time when users are so close to achieve "doing exercises and workouts every day".
+  # Send out promotions in the time interval before those two peaks to raise potential customers' awareness of smart devices for empowering their health-improving habits.
